@@ -15,6 +15,7 @@ permissions:
   id-token: write
   contents: read
   security-events: write
+  actions: read
 
 env:
   AWS_REGION: us-east-1
@@ -50,15 +51,17 @@ jobs:
           path: _gitops
 
       - name: Update image tag — DEV
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
         run: |
-          yq e '.image.tag = "${{ needs.build.outputs.image-tag }}"' -i \
+          yq e ".image.tag = \"${IMAGE_TAG}\"" -i \
             "_gitops/envs/dev/values-notification-service.yaml"
           cd _gitops
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           git diff --staged --quiet && echo "Already up to date" && exit 0
-          git commit -m "ci(dev): update notification-service → ${{ needs.build.outputs.image-tag }}"
+          git commit -m "ci(dev): update notification-service → ${IMAGE_TAG}"
           git push
 
   open-qa-pr:
@@ -78,8 +81,14 @@ jobs:
       - name: Create branch, commit, open PR
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          IMAGE_TAG: ${{ needs.build.outputs.image-tag }}
+          REF_NAME: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GITOPS_REPO_NAME: ${{ env.GITOPS_REPO }}
         run: |
-          IMAGE_TAG="${{ needs.build.outputs.image-tag }}"
           VALUES="_gitops/envs/qa/values-notification-service.yaml"
           BRANCH="promote/qa/notification-service/${IMAGE_TAG}"
 
@@ -106,9 +115,9 @@ jobs:
             "" \
             "Service : notification-service" \
             "Image   : ${IMAGE_TAG}" \
-            "Branch  : ${{ github.ref_name }}" \
-            "Actor   : ${{ github.actor }}" \
-            "Build   : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "Branch  : ${REF_NAME}" \
+            "Actor   : ${ACTOR}" \
+            "Build   : ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
             "" \
             "## Checklist" \
             "- [ ] DEV smoke test passed (see build link above)" \
@@ -119,7 +128,7 @@ jobs:
             "ArgoCD (pharma-qa) auto-syncs on merge." > /tmp/pr-body.md
 
           gh pr create \
-            --repo "${{ env.GITOPS_REPO }}" \
+            --repo "$GITOPS_REPO_NAME" \
             --title "promote(qa): notification-service → ${IMAGE_TAG}" \
             --body-file /tmp/pr-body.md \
             --base main \
