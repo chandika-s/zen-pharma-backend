@@ -548,10 +548,186 @@ Same inputs as Java equivalents with `node-version` (default `20`) replacing `ne
 > **Why a dedicated `GITOPS_TOKEN` instead of using `GITHUB_TOKEN`?**  
 > `GITHUB_TOKEN` is automatically generated per workflow run and scoped to the current repository only. It cannot write to a different repository (`chandika-s/zen-gitops`). A separate PAT or GitHub App token with `contents: write` permission on zen-gitops is required for cross-repo operations. Using a GitHub App token (instead of a personal PAT) is preferred in production — App tokens are not tied to a specific user account and don't expire when someone leaves the organisation.
 
-**AWS OIDC** (`pharma-github-actions-role`) trust policy must allow `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. Required ECR permissions: `GetAuthorizationToken`, `BatchCheckLayerAvailability`, `PutImage`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`.
+---
+
+## AWS OIDC + ECR Setup — Step by Step
+
+GitHub Actions authenticates to AWS using **OpenID Connect (OIDC)** — no long-lived AWS access keys stored as secrets. Each workflow run gets a short-lived token (valid ~1 hour) via the GitHub OIDC provider.
+
+> **Why OIDC instead of storing `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` as secrets?**  
+> Long-lived keys are a security risk: they don't expire, can be leaked via logs, and give permanent access if compromised. OIDC tokens are ephemeral (1 hour), scoped to a specific workflow run, and automatically rotated. If a token leaks, it expires before an attacker can use it. OIDC is the AWS and GitHub recommended approach for CI/CD.
+
+### Step 1 — Create GitHub OIDC Identity Provider in AWS
+
+This tells AWS to trust tokens issued by GitHub Actions.
+
+```bash
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+```
+
+> Only needs to be done once per AWS account. If you get `EntityAlreadyExists`, it's already set up.
+
+### Step 2 — Get your AWS Account ID
+
+```bash
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "Account ID: $AWS_ACCOUNT_ID"
+```
+
+### Step 3 — Create the IAM Trust Policy
+
+This policy allows GitHub Actions from **this specific repo** to assume the role. The `sub` condition ensures only workflows from `chandika-s/zen-pharma-backend` can authenticate — no other repo can assume this role.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:chandika-s/zen-pharma-backend:*"
+        }
+      }
+    }
+  ]
+}
+```
+
+Save as `/tmp/trust-policy.json` (replace `<ACCOUNT_ID>` with your actual account ID), then create the role:
+
+```bash
+aws iam create-role \
+  --role-name pharma-github-actions-role \
+  --assume-role-policy-document file:///tmp/trust-policy.json \
+  --description "GitHub Actions OIDC role for zen-pharma-backend CI/CD"
+```
+
+### Step 4 — Create and Attach ECR Permission Policy
+
+The role only needs ECR permissions — nothing else. This follows the principle of least privilege.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ECRAuth",
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ECRPushPull",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:BatchGetImage",
+        "ecr:CompleteLayerUpload",
+        "ecr:DescribeImages",
+        "ecr:DescribeRepositories",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:ListImages",
+        "ecr:PutImage",
+        "ecr:UploadLayerPart"
+      ],
+      "Resource": "arn:aws:ecr:us-east-1:<ACCOUNT_ID>:repository/*"
+    }
+  ]
+}
+```
+
+Save as `/tmp/ecr-policy.json`, then attach:
+
+```bash
+aws iam put-role-policy \
+  --role-name pharma-github-actions-role \
+  --policy-name pharma-ecr-access \
+  --policy-document file:///tmp/ecr-policy.json
+```
 
 > **Why scope the IAM role to ECR permissions only?**  
-> The principle of least privilege. If the role also had S3, Lambda, or other permissions, a compromised workflow run (e.g. through a malicious dependency) could exfiltrate data or modify infrastructure. The role can only push images to ECR — the blast radius of a compromise is limited to ECR writes.
+> If the role also had S3, Lambda, or other permissions, a compromised workflow run (e.g. through a malicious dependency) could exfiltrate data or modify infrastructure. The role can only push images to ECR — the blast radius of a compromise is limited to ECR writes.
+
+### Step 5 — Create ECR Repositories (one per microservice)
+
+```bash
+for svc in api-gateway auth-service drug-catalog-service inventory-service \
+           manufacturing-service notification-service supplier-service; do
+  aws ecr create-repository \
+    --repository-name "$svc" \
+    --region us-east-1 \
+    --image-scanning-configuration scanOnPush=true \
+    --encryption-configuration encryptionType=AES256
+done
+```
+
+> `scanOnPush=true` enables AWS-native image scanning alongside Trivy in the pipeline — defense in depth.
+
+### Step 6 — Add Secrets to GitHub Repository
+
+Go to **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value | Required |
+|--------|-------|----------|
+| `AWS_ACCOUNT_ID` | Your 12-digit AWS account ID | Yes |
+| `GITOPS_TOKEN` | GitHub PAT with `repo` scope on `chandika-s/zen-gitops` | Yes |
+| `SEMGREP_APP_TOKEN` | Token from semgrep.dev (for dashboard integration) | Optional |
+
+### Step 7 — Create GitHub Environments
+
+Go to **Settings → Environments**:
+
+| Environment | Protection Rules |
+|-------------|-----------------|
+| `dev` | None — auto-deploys on merge to develop |
+| `prod` | Add required reviewers for manual approval gate |
+
+### Step 8 — Verify Setup
+
+```bash
+# Verify OIDC provider
+aws iam list-open-id-connect-providers
+
+# Verify role
+aws iam get-role --role-name pharma-github-actions-role --query 'Role.Arn'
+
+# Verify ECR repos
+aws ecr describe-repositories --region us-east-1 \
+  --query 'repositories[].repositoryName' --output table
+
+# Verify GitHub secrets (requires gh CLI)
+gh secret list --repo chandika-s/zen-pharma-backend
+```
+
+### How OIDC works at runtime
+
+```
+GitHub Actions Runner                    AWS
+─────────────────────                    ───
+1. Workflow starts
+2. Runner requests OIDC token ──────────→
+   (contains repo, branch, workflow)     3. IAM validates token against
+                                            trust policy (repo match,
+                                            audience match)
+                                         4. Returns temporary credentials
+                                            (AccessKeyId, SecretAccessKey,
+                                            SessionToken — expires ~1hr)
+5. Runner uses temp creds ──────────────→ 6. ECR authenticates, allows push
+```
+
+No long-lived keys ever touch GitHub Secrets. If a workflow run is compromised, the attacker gets a token that expires in ~1 hour and can only push to ECR.
 
 ---
 
