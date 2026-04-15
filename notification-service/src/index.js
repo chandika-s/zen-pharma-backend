@@ -27,7 +27,7 @@ app.get('/actuator/health/readiness', (req, res) => {
 });
 
 app.get('/actuator/health/liveness', (req, res) => {
-  res.json({ status: 'UP' });
+  res.json({ status: 'UP', uptime: process.uptime() });
 });
 
 app.use((err, req, res, _next) => {
