@@ -30,7 +30,7 @@ app.get('/actuator/health/liveness', (req, res) => {
   res.json({ status: 'UP' });
 });
 
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   logger.error(err.message);
   res.status(500).json({ error: 'Internal server error' });
 });
