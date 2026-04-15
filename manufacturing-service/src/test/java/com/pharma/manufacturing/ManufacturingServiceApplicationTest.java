@@ -18,3 +18,4 @@ class ManufacturingServiceApplicationTest {
     void contextLoads() {
     }
 }
+
