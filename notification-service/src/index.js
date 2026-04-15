@@ -23,7 +23,7 @@ app.get('/actuator/health', (req, res) => {
 });
 
 app.get('/actuator/health/readiness', (req, res) => {
-  res.json({ status: 'UP' });
+  res.json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
 app.get('/actuator/health/liveness', (req, res) => {
