@@ -19,7 +19,7 @@ app.get('/metrics', async (req, res) => {
 });
 
 app.get('/actuator/health', (req, res) => {
-  res.json({ status: 'UP', service: 'notification-service' });
+  res.json({ status: 'UP', service: 'notification-service', version: process.env.npm_package_version || '1.0.0' });
 });
 
 app.get('/actuator/health/readiness', (req, res) => {
