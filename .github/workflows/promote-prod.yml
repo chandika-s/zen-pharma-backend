@@ -51,8 +51,9 @@ jobs:
           chmod +x /usr/local/bin/yq
 
       - name: Validate QA values file exists
+        env:
+          SVC: ${{ inputs.service }}
         run: |
-          SVC="${{ inputs.service }}"
           QA_VALUES="_gitops/envs/qa/values-${SVC}.yaml"
           if [[ ! -f "$QA_VALUES" ]]; then
             echo "::error::QA values file not found: ${QA_VALUES}"
@@ -72,8 +73,9 @@ jobs:
           echo "Promoting image: ${IMAGE_TAG}"
 
       - name: Validate PROD values file exists
+        env:
+          SVC: ${{ inputs.service }}
         run: |
-          SVC="${{ inputs.service }}"
           PROD_VALUES="_gitops/envs/prod/values-${SVC}.yaml"
           if [[ ! -f "$PROD_VALUES" ]]; then
             echo "::error::PROD values file not found: ${PROD_VALUES}"
@@ -85,8 +87,13 @@ jobs:
       - name: Create branch, patch values, open PR
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          SVC: ${{ inputs.service }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          GITOPS_REPO_NAME: ${{ env.GITOPS_REPO }}
         run: |
-          SVC="${{ inputs.service }}"
           BRANCH="promote/prod/${SVC}/${IMAGE_TAG}"
 
           cd _gitops
@@ -107,8 +114,8 @@ jobs:
             "" \
             "Service : ${SVC}" \
             "Image   : ${IMAGE_TAG}" \
-            "Promoted from QA by : ${{ github.actor }}" \
-            "Workflow run : ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "Promoted from QA by : ${ACTOR}" \
+            "Workflow run : ${SERVER_URL}/${REPOSITORY}/actions/runs/${RUN_ID}" \
             "" \
             "## Pre-merge Checklist" \
             "- [ ] QA sign-off received" \
@@ -123,7 +130,7 @@ jobs:
             "Merging this PR updates ${PROD_VALUES}." > /tmp/pr-body.md
 
           gh pr create \
-            --repo "${{ env.GITOPS_REPO }}" \
+            --repo "$GITOPS_REPO_NAME" \
             --title "promote(prod): ${SVC} → ${IMAGE_TAG}" \
             --body-file /tmp/pr-body.md \
             --base main \
