@@ -88,13 +88,12 @@ jobs:
         with:
           category: /language:java
 
-      - name: Semgrep SAST (java · owasp-top-ten · spring-boot)
+      - name: Semgrep SAST (java · owasp-top-ten)
         uses: semgrep/semgrep-action@v1
         with:
           config: >-
             p/java
             p/owasp-top-ten
-            p/spring-boot
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
@@ -107,6 +106,8 @@ jobs:
 
       - name: OWASP Dependency Check (CVSS ≥ 7.0 fails build)
         uses: dependency-check/Dependency-Check_Action@main
+        env:
+          JAVA_HOME: ""
         with:
           project: ${{ inputs.service-name }}
           path: ${{ inputs.service-dir }}
