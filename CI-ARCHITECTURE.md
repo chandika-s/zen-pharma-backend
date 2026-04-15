@@ -14,7 +14,7 @@ Before diving into the files, these are the principles every decision in this ar
 A Docker image is built and pushed to ECR exactly once, tagged with the git commit SHA. That same image — same bytes, same digest — flows through DEV → QA → PROD. No rebuilding per environment. This guarantees that what QA tested is exactly what runs in PROD.
 
 **2. GitOps — Deployment is a git commit**  
-Kubernetes state is declared in `ravdy/zen-gitops`, not controlled by imperative `kubectl apply` commands in CI. ArgoCD watches that repo and reconciles the cluster toward the declared state. This means every deployment has a git history, an author, a timestamp, and is rollback-able by reverting a commit.
+Kubernetes state is declared in `chandika-s/zen-gitops`, not controlled by imperative `kubectl apply` commands in CI. ArgoCD watches that repo and reconciles the cluster toward the declared state. This means every deployment has a git history, an author, a timestamp, and is rollback-able by reverting a commit.
 
 **3. Separation of concerns**  
 Application code lives in this repo. Deployment configuration lives in zen-gitops. CI only writes to zen-gitops — it never talks to Kubernetes directly. This means: developers can't accidentally deploy by pushing code, and infra changes don't trigger application rebuilds.
@@ -205,7 +205,7 @@ zen-pharma-backend/
 │  Job 3 · open-qa-pr  (needs: build + deploy-dev)                       │
 │    git checkout -b promote/qa/<service>/<image-tag>  in zen-gitops     │
 │    yq patch: envs/qa/values-<service>.yaml                             │
-│    gh pr create → ravdy/zen-gitops                                     │
+│    gh pr create → chandika-s/zen-gitops                                     │
 │    QA team reviews + merges the PR                                     │
 │    ArgoCD (pharma-qa) auto-syncs on merge                              │
 └────────────────────────────────────────────────────────────────────────┘
@@ -223,7 +223,7 @@ zen-pharma-backend/
 │    ↳ exits with error if PROD file missing — PROD must be onboarded    │
 │  git checkout -b promote/prod/<service>/<image-tag>  in zen-gitops     │
 │  yq patch: envs/prod/values-<service>.yaml                             │
-│  gh pr create → ravdy/zen-gitops                                       │
+│  gh pr create → chandika-s/zen-gitops                                       │
 │  After approvals: merge PR                                             │
 │  ArgoCD (pharma-prod) shows OutOfSync → engineer syncs manually        │
 │    at maintenance window                                               │
@@ -542,11 +542,11 @@ Same inputs as Java equivalents with `node-version` (default `20`) replacing `ne
 | Secret | Used by | Description |
 |---|---|---|
 | `AWS_ACCOUNT_ID` | all `ci-*.yml` | 12-digit AWS account ID for ECR URL construction |
-| `GITOPS_TOKEN` | all `ci-*.yml`, `promote-prod.yml` | GitHub PAT or App token with `contents: write` on `ravdy/zen-gitops` |
+| `GITOPS_TOKEN` | all `ci-*.yml`, `promote-prod.yml` | GitHub PAT or App token with `contents: write` on `chandika-s/zen-gitops` |
 | `SEMGREP_APP_TOKEN` | `_java-build.yml`, `_node-build.yml` | Semgrep cloud token (optional — OSS rules work without it) |
 
 > **Why a dedicated `GITOPS_TOKEN` instead of using `GITHUB_TOKEN`?**  
-> `GITHUB_TOKEN` is automatically generated per workflow run and scoped to the current repository only. It cannot write to a different repository (`ravdy/zen-gitops`). A separate PAT or GitHub App token with `contents: write` permission on zen-gitops is required for cross-repo operations. Using a GitHub App token (instead of a personal PAT) is preferred in production — App tokens are not tied to a specific user account and don't expire when someone leaves the organisation.
+> `GITHUB_TOKEN` is automatically generated per workflow run and scoped to the current repository only. It cannot write to a different repository (`chandika-s/zen-gitops`). A separate PAT or GitHub App token with `contents: write` permission on zen-gitops is required for cross-repo operations. Using a GitHub App token (instead of a personal PAT) is preferred in production — App tokens are not tied to a specific user account and don't expire when someone leaves the organisation.
 
 **AWS OIDC** (`pharma-github-actions-role`) trust policy must allow `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. Required ECR permissions: `GetAuthorizationToken`, `BatchCheckLayerAvailability`, `PutImage`, `InitiateLayerUpload`, `UploadLayerPart`, `CompleteLayerUpload`.
 
@@ -555,7 +555,7 @@ Same inputs as Java equivalents with `node-version` (default `20`) replacing `ne
 
 ---
 
-## GitOps Repo Layout (`ravdy/zen-gitops`)
+## GitOps Repo Layout (`chandika-s/zen-gitops`)
 
 ```
 zen-gitops/

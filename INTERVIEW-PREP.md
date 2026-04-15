@@ -31,7 +31,7 @@
 
 - **What is being tested:** Whether you understand GitOps as a pull-based declarative model — not just "we use Git."
 - **Strong answer:** In traditional CI/CD, the pipeline pushes changes to the cluster using `kubectl apply` or Helm commands. Once the pipeline finishes, there is no ongoing guarantee that the cluster stays in the desired state — someone could `kubectl edit` a deployment manually and drift from what CI deployed. GitOps inverts this. Git is the single source of truth for desired state. ArgoCD runs inside the cluster and continuously pulls from Git, comparing desired state against actual cluster state. Any drift is detected and self-healed automatically. Every change to the cluster is a Git commit — auditable, reversible, and author-attributed.
-- **Project context:** In our project, GitHub Actions never runs `kubectl` directly. It only commits to `ravdy/zen-gitops`. ArgoCD watches that repo and syncs the cluster. If someone manually changes a deployment in Kubernetes, ArgoCD detects the drift and reverts it to what's in Git.
+- **Project context:** In our project, GitHub Actions never runs `kubectl` directly. It only commits to `chandika-s/zen-gitops`. ArgoCD watches that repo and syncs the cluster. If someone manually changes a deployment in Kubernetes, ArgoCD detects the drift and reverts it to what's in Git.
 
 ---
 
