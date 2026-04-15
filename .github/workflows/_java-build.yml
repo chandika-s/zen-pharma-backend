@@ -149,28 +149,26 @@ jobs:
       - name: Cache OWASP NVD database
         uses: actions/cache@v4
         with:
-          path: ~/.owasp/dependency-check
+          path: ~/.owasp/dependency-check-data
           key: owasp-nvd-${{ runner.os }}-${{ hashFiles(format('{0}/pom.xml', inputs.service-dir)) }}
           restore-keys: owasp-nvd-${{ runner.os }}-
 
       - name: OWASP Dependency Check (CVSS ≥ 7.0 fails build)
-        uses: dependency-check/Dependency-Check_Action@main
-        env:
-          JAVA_HOME: ""
-        with:
-          project: ${{ inputs.service-name }}
-          path: ${{ inputs.service-dir }}
-          format: HTML
-          args: >
-            --failOnCVSS 7
-            --enableRetired
+        run: |
+          cd ${{ inputs.service-dir }}
+          mvn org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7 \
+            -DenableRetired=true \
+            -DdataDirectory=$HOME/.owasp/dependency-check-data \
+            -Dformat=HTML \
+            --no-transfer-progress
 
       - name: Upload Dependency Check report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: depcheck-${{ inputs.service-name }}
-          path: reports/
+          path: ${{ inputs.service-dir }}/target/dependency-check-report.html
           retention-days: 14
 
       # ── AWS credentials via OIDC (no long-lived keys) ─────────────────────────
