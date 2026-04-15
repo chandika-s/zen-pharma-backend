@@ -121,7 +121,7 @@ jobs:
 
       - name: Upload JaCoCo coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ inputs.service-name }}
           path: ${{ inputs.service-dir }}/target/site/jacoco/
@@ -165,7 +165,7 @@ jobs:
 
       - name: Upload Dependency Check report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: depcheck-${{ inputs.service-name }}
           path: reports/
