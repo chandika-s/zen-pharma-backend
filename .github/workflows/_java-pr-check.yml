@@ -98,7 +98,10 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
+      # ── OWASP Dependency Check (disabled — NVD database download too slow
+      #    without API key; re-enable after adding NVD_API_KEY secret) ────────
       - name: Cache OWASP NVD database
+        if: false
         uses: actions/cache@v4
         with:
           path: ~/.owasp/dependency-check-data
@@ -106,6 +109,7 @@ jobs:
           restore-keys: owasp-nvd-${{ runner.os }}-
 
       - name: OWASP Dependency Check (CVSS ≥ 7.0 fails build)
+        if: false
         run: |
           cd ${{ inputs.service-dir }}
           mvn org.owasp:dependency-check-maven:check \
@@ -116,7 +120,7 @@ jobs:
             --no-transfer-progress
 
       - name: Upload Dependency Check report
-        if: always()
+        if: false
         uses: actions/upload-artifact@v4
         with:
           name: depcheck-${{ inputs.service-name }}
